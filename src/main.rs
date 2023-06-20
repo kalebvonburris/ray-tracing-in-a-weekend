@@ -1,3 +1,5 @@
+use std::io::{stderr, Write};
+
 fn main() {
     // Consts for image dimensions.
     const IMAGE_WIDTH: u64 = 256;
@@ -9,6 +11,9 @@ fn main() {
     println!("255");
 
     for h in (0..IMAGE_HEIGHT).rev() {
+        eprint!("\rScanlines remaining: {:3}", IMAGE_HEIGHT - h - 1);
+        stderr().flush().unwrap();
+
         for w in 0..IMAGE_WIDTH {
             let r = (w as f64) / ((IMAGE_WIDTH - 1) as f64);
             let g = (h as f64) / ((IMAGE_HEIGHT - 1) as f64);
