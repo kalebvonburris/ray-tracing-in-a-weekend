@@ -1,79 +1,65 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
+use nalgebra::Point3;
+use ray_tracing_in_a_weekend::{
+    create_sphere,
+    objects::hittable::Hittable,
+    ppm::write_image_to_ppm,
+    view::write_color,
+    view::{Camera, Ray},
+    world::World,
+    Float,
+};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-// Local libraries
-mod vec;
-use std::f64::INFINITY;
-
-use rand::Rng;
-use vec::{Color, Point3, Vec3};
-mod ray;
-use ray::Ray;
-mod objects;
-use objects::*;
-mod camera;
-use camera::*;
-
-// Extrernal libraries
-use indicatif::ProgressIterator;
-
-fn ray_color(ray: &Ray, world: &HittableList, depth: u64) -> Color {
-    if depth == 0 { return Color::new(0.0, 0.0, 0.0) }
-
-    if let Some(record) =  world.hit(ray, 0.001, INFINITY) {
-        let target = record.p + record.normal + Vec3::random_in_unit_sphere().normalized();
-        let ray = Ray::new(record.p, target - record.p);
-        0.5 * ray_color(&ray, world, depth - 1)
-    }
-    else {
-        let unit_direction: Vec3 = ray.direction().normalized();
-        let t: f64 = 0.5 * (unit_direction.y() + 1.0);
-        ((1.0 - t) * Color::new(1.0, 1.0, 1.0)) + (t * Color::new(0.5, 0.7, 1.0))
-    }
-}
-
-fn main() {
-    let aspect_ratio: f64 = 16.0 / 9.0;
-    let image_width: u64 = 1920;
-    let image_height: u64 = ((image_width as f64) / aspect_ratio) as u64;
-    let samples_per_pixel: u64 = 100;
-    let max_depth: u64 = 25;
-
-    // World
-
-    let mut world: HittableList = HittableList::new(vec![]);
-
-    world.add(Box::new(Sphere::new(Vec3::new(0.0, 0.0, -1.0), 0.5)));
-
-    world.add(Box::new(Sphere::new(Vec3::new(0.0, -100.5, -1.0), 100.0)));
-
+pub fn main() {
     // Camera
+    let camera = Camera::default();
 
-    let camera: Camera = Camera::new();
+    // Image
+    let mut image = format!("P3\n{} {}\n255\n", camera.image_width, camera.image_height);
 
-    // PPM Headers.
+    // Delta Vectors
+    let pixel_delta_vertical = camera.horizontal / camera.image_width as Float;
+    let pixel_delta_horizontal = camera.vertical / camera.image_height as Float;
 
-    println!("P3");
-    println!("{} {}", image_width, image_height);
-    println!("255");
+    // Exact location of the first pixel
+    let pixel_00_loc =
+        camera.upper_left_corner + (pixel_delta_horizontal + pixel_delta_vertical) / 2.0;
 
-    let mut rng = rand::thread_rng();
+    // Objects
+    let objects: Vec<Box<dyn Hittable>> = vec![
+        create_sphere(Point3::new(0.0, 0.0, -1.0), 0.5),
+        create_sphere(Point3::new(0.0, -100.5, -1.0), 100.0),
+    ];
 
-    for h in (0..image_height as u32).rev().progress() {
-        for w in 0..image_width {
-            let mut pixel_color = Color::new(0.0, 0.0, 0.0);
-            for _ in 0..samples_per_pixel {
-                let random_u: f64 = rng.gen();
-                let random_v: f64 = rng.gen();
+    let world = World::new(objects);
 
-                let u = (w as f64 + random_u) / ((image_width - 1) as f64);
-                let v = (h as f64 + random_v) / ((image_height - 1) as f64);
+    // Render
+    let rest_of_image = (0..camera.image_height)
+        .into_par_iter()
+        //.progress_count(camera.image_height as u64)
+        .map(|j| {
+            // 13 here because the the max length of a message is 13.
+            //   "255 255 255\n".len() = 13 characters
+            let mut local_chunk = String::with_capacity(13 * camera.image_width as usize);
+            for i in 0..camera.image_width {
+                let pixel_center = pixel_00_loc
+                    + (j as Float * pixel_delta_horizontal)
+                    + (i as Float * pixel_delta_vertical);
 
-                let r: Ray = camera.get_ray(u, v);
-                pixel_color += ray_color(&r, &world, max_depth);
+                let ray_dir = pixel_center - camera.origin;
+
+                let ray = Ray::new(camera.origin, ray_dir);
+
+                let color = ray.color(&world);
+
+                write_color(&mut local_chunk, color);
             }
-            
-            println!("{}", pixel_color.format_color(samples_per_pixel));
-        }
-    }
+            local_chunk
+        })
+        .collect::<Vec<String>>()
+        .join("");
+
+    image.push_str(&rest_of_image);
+
+    write_image_to_ppm(&image);
 }
