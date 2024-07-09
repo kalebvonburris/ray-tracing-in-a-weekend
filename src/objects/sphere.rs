@@ -1,6 +1,9 @@
 use nalgebra::Point3;
 
-use crate::{view::ray::Ray, Float};
+use crate::{
+    view::{interval::Interval, ray::Ray},
+    Float,
+};
 
 use super::hittable::{HitRecord, Hittable};
 
@@ -18,7 +21,7 @@ impl Sphere {
 
 impl Hittable for Sphere {
     #[must_use]
-    fn hit(&self, ray: Ray, t_min: Float, t_max: Float) -> Option<HitRecord> {
+    fn hit(&self, ray: Ray, interval: &Interval) -> Option<HitRecord> {
         let oc = ray.origin - self.center;
         let a = ray.direction.magnitude_squared();
         let half_b = oc.dot(&ray.direction);
@@ -32,9 +35,9 @@ impl Hittable for Sphere {
         let sqrtd = discriminant.sqrt();
 
         let mut root = (-half_b - sqrtd) / a;
-        if root < t_min || t_max < root {
+        if !interval.surrounds(root) {
             root = (-half_b + sqrtd) / a;
-            if root < t_min || t_max < root {
+            if !interval.surrounds(root) {
                 return None;
             }
         }

@@ -1,6 +1,9 @@
 use nalgebra::{Point3, Vector3};
 
-use crate::{view::Ray, Float};
+use crate::{
+    view::{interval::Interval, Ray},
+    Float,
+};
 
 pub trait Hittable: Sync + Send {
     /// Check if a ray hit an object.
@@ -9,7 +12,7 @@ pub trait Hittable: Sync + Send {
     /// - `ray`: The ray to check for a hit.
     /// - `t_min`: The minimum time for a hit.
     /// - `t_max`: The maximum time for a hit.
-    fn hit(&self, ray: Ray, t_min: Float, t_max: Float) -> Option<HitRecord>;
+    fn hit(&self, ray: Ray, interval: &Interval) -> Option<HitRecord>;
 }
 
 /// The record of a `Ray` hitting an object.

@@ -1,6 +1,10 @@
 use nalgebra::{Point3, Vector3};
 
-use crate::{view::Color, world::World, Float};
+use crate::{
+    get_random_on_hemisphere, objects::hittable::HitRecord, view::Color, world::World, Float, Int,
+};
+
+use super::interval::Interval;
 
 /// A `Ray` cast from the `Camera`.
 #[derive(Debug, Clone, Copy)]
@@ -35,11 +39,30 @@ impl Ray {
 
     /// Get the color of the `Ray`.
     #[must_use]
-    pub fn color(&self, world: &World) -> Color {
+    pub fn color(&self, world: &World, mut interval: Interval, depth: Int) -> Color {
+        if depth == 0 {
+            return Color::new(0.0, 0.0, 0.0);
+        }
+
+        let mut hit: Option<HitRecord> = None;
+
         for object in world.objects.iter() {
-            if let Some(hit_record) = object.hit(*self, 0.0, Float::INFINITY) {
-                return 0.5 * (hit_record.normal + Color::new(1.0, 1.0, 1.0));
+            if let Some(r) = object.hit(*self, &interval) {
+                if r.time < interval.max {
+                    interval.max = r.time;
+                    hit = Some(r);
+                }
             }
+        }
+
+        if let Some(r) = hit {
+            let direction = get_random_on_hemisphere(r.normal);
+            return 0.5
+                * Self::new(r.point, direction).color(
+                    world,
+                    Interval::new(0.0, Float::INFINITY),
+                    depth - 1,
+                );
         }
 
         let unit_direction = self.direction.normalize();
